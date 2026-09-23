@@ -4,9 +4,8 @@ import re
 
 app = Flask(__name__)
 
-# Частоты букв в русском языке (в порядке убывания, примерно)
-RU_FREQ = "оеаинтсрвлкмдпуяызьгбчйхжшюцщэфъ"
-# Английский вариант
+# Частоты букв русского языка (по убыванию)
+RU_FREQ = "оеаинтсрвлкмдпуяыьгзбчйхжшюцщэфъё"
 EN_FREQ = "etaoinshrdlucmfwypvbgkjqxz"
 
 
@@ -19,29 +18,28 @@ def index():
 def analyze():
     data = request.get_json()
     text = data.get("text", "")
-    lang = data.get("lang", "ru")
 
-    # Считаем частоты цифр и пробелов
-    symbols = re.findall(r"[0-9 ]", text)
-    counter = Counter(symbols)
+    # Достаём все числа (с ведущими нулями), игнорируем знаки препинания
+    tokens = re.findall(r"\d+", text)
+    counter = Counter(tokens)
 
-    freq_order = RU_FREQ if lang == "ru" else EN_FREQ
+    # Сортируем числа: сначала по частоте (убыв), потом по числовому значению
+    sorted_tokens = sorted(counter.keys(), key=lambda t: (-counter[t], int(t)))
 
-    # Сортируем символы по частоте (по убыванию)
-    sorted_symbols = [s for s, _ in counter.most_common()]
-
-    # Черновое сопоставление: самый частый символ -> самая частая буква
+    # Черновое сопоставление по частоте с русскими буквами
     suggestion = {}
-    for i, sym in enumerate(sorted_symbols):
-        if i < len(freq_order):
-            suggestion[sym] = freq_order[i]
+    for i, tok in enumerate(sorted_tokens):
+        if i < len(RU_FREQ):
+            suggestion[tok] = RU_FREQ[i]
         else:
-            suggestion[sym] = "?"
+            suggestion[tok] = "?"
 
     return jsonify({
         "counts": dict(counter),
-        "sorted_symbols": sorted_symbols,
-        "suggestion": suggestion
+        "sorted_tokens": sorted_tokens,
+        "suggestion": suggestion,
+        "total": len(tokens),
+        "unique": len(counter),
     })
 
 
@@ -49,15 +47,16 @@ def analyze():
 def decode():
     data = request.get_json()
     text = data.get("text", "")
-    mapping = data.get("mapping", {})  # {"0": "о", "1": "е", ...}
+    mapping = data.get("mapping", {})  # {"01": " ", "20": "и", ...}
 
-    result = []
-    for ch in text:
-        if ch in mapping and mapping[ch]:
-            result.append(mapping[ch])
-        else:
-            result.append(ch)
-    return jsonify({"result": "".join(result)})
+    # Заменяем числа на буквы, сохраняя пробелы/точки/переносы как есть
+    def replace_token(match):
+        tok = match.group(0)
+        return mapping.get(tok, f"[{tok}]")
+
+    # Проходим по тексту: числа -> буквы, остальное (пробелы, точки) оставляем
+    result = re.sub(r"\d+", replace_token, text)
+    return jsonify({"result": result})
 
 
 if __name__ == "__main__":
