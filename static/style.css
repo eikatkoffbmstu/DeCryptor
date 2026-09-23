@@ -164,3 +164,21 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
+.brute-btn {
+    background: linear-gradient(135deg, #8e44ad, #9b59b6);
+    font-weight: bold;
+}
+.brute-btn:hover { background: linear-gradient(135deg, #7d3c98, #8e44ad); }
+
+.brute-status {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #f4ecfb;
+    border-left: 4px solid #9b59b6;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #4a235a;
+}
+.brute-status.show { display: block; }

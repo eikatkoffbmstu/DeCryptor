@@ -6,7 +6,20 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<button onclick="analyze()">Проанализировать</button>
+<button onclick="applyDefaults()">01=␣, 20=и</button>
+<button onclick="clearMapping()">Сбросить</button>
 
+<!-- 🔨 НОВОЕ: брутфорс -->
+<button class="brute-btn" onclick="runBrute()">🔨 Подобрать автоматически</button>
+<select id="bruteTime" style="margin-left:6px;padding:6px;border-radius:6px;">
+    <option value="5">5 сек</option>
+    <option value="8" selected>8 сек</option>
+    <option value="15">15 сек</option>
+    <option value="30">30 сек</option>
+</select>
+
+<div id="bruteStatus" class="brute-status"></div>
 <!-- ⭐ Кнопка Premium в правом верхнем углу -->
 <button class="premium-btn" onclick="openPremium()">⭐ Купить Premium</button>
 
@@ -180,6 +193,55 @@ function showToast(msg) {
     t.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+async function runBrute() {
+    const text = document.getElementById('cipher').value;
+    const timeLimit = parseFloat(document.getElementById('bruteTime').value);
+    const status = document.getElementById('bruteStatus');
+
+    if (!text.trim()) {
+        status.textContent = '⚠️ Вставь шифротекст';
+        return;
+    }
+
+    status.innerHTML = `⏳ Перебираю варианты (до ${timeLimit} сек)…`;
+    status.classList.add('show');
+
+    try {
+        const resp = await fetch('/bruteforce', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text, time_limit: timeLimit})
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            status.textContent = '❌ ' + data.error;
+            return;
+        }
+
+        // Заполняем поля сопоставления найденными буквами
+        const inputs = document.querySelectorAll('#mapping input');
+        if (inputs.length === 0) {
+            // Если ещё не анализировали — сделаем analyze сначала
+            await analyze();
+        }
+        document.querySelectorAll('#mapping input').forEach(inp => {
+            const tok = inp.dataset.tok;
+            if (data.mapping[tok] !== undefined) {
+                inp.value = data.mapping[tok];
+            }
+        });
+
+        // Показываем результат
+        decode();
+
+        status.innerHTML = `✅ Готово за ${data.elapsed} сек.<br>
+            Найдено слов в словаре: <b>${data.score}</b> из ${data.total_words} (уникальных: ${data.unique_words})<br>
+            Словарь: ${data.dict_size.toLocaleString('ru-RU')} слов, улучшений: ${data.improvements}`;
+    } catch (e) {
+        status.textContent = '❌ Ошибка: ' + e.message;
+    }
 }
 </script>
 </body>
