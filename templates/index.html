@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Частотный анализ шифра</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<h1>🔍 Частотный анализ</h1>
+
+<div class="row">
+    <div class="col">
+        <label>Шифротекст (цифры и пробелы):</label>
+        <textarea id="cipher" rows="8" placeholder="Вставь сюда текст..."></textarea>
+
+        <label>Язык:</label>
+        <select id="lang">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+        </select>
+
+        <button onclick="analyze()">Проанализировать</button>
+    </div>
+
+    <div class="col">
+        <h3>Частоты символов</h3>
+        <div id="freqs"></div>
+
+        <h3>Сопоставление (можно править)</h3>
+        <div id="mapping"></div>
+
+        <button onclick="decode()">Расшифровать</button>
+
+        <h3>Результат</h3>
+        <pre id="result"></pre>
+    </div>
+</div>
+
+<script>
+let lastMapping = {};
+
+async function analyze() {
+    const text = document.getElementById('cipher').value;
+    const lang = document.getElementById('lang').value;
+
+    const resp = await fetch('/analyze', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, lang})
+    });
+    const data = await resp.json();
+
+    // Частоты
+    const freqsDiv = document.getElementById('freqs');
+    freqsDiv.innerHTML = data.sorted_symbols.map(s =>
+        `<span class="chip">'${s === ' ' ? '␣' : s}': ${data.counts[s]}</span>`
+    ).join('');
+
+    // Поля сопоставления
+    const mapDiv = document.getElementById('mapping');
+    mapDiv.innerHTML = data.sorted_symbols.map(s => {
+        const label = s === ' ' ? '␣' : s;
+        const val = data.suggestion[s] || '';
+        return `<div class="map-row">
+            <span class="sym">${label}</span> →
+            <input type="text" maxlength="1" data-sym="${s}" value="${val}" oninput="decode()">
+        </div>`;
+    }).join('');
+
+    decode();
+}
+
+async function decode() {
+    const text = document.getElementById('cipher').value;
+    const inputs = document.querySelectorAll('#mapping input');
+    const mapping = {};
+    inputs.forEach(inp => { mapping[inp.dataset.sym] = inp.value; });
+
+    const resp = await fetch('/decode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, mapping})
+    });
+    const data = await resp.json();
+    document.getElementById('result').textContent = data.result;
+}
+</script>
+</body>
+</html>
