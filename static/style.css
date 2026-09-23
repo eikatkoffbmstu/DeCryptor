@@ -1,3 +1,158 @@
+* { box-sizing: border-box; }
+body {
+    font-family: system-ui, sans-serif;
+    margin: 20px;
+    background: #f0f2f5;
+    color: #222;
+}
+h1 { color: #2c3e50; }
+
+.row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+.col {
+    flex: 1;
+    background: white;
+    padding: 18px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    min-width: 0;
+}
+
+textarea {
+    width: 100%;
+    font-family: 'Consolas', monospace;
+    font-size: 14px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+button {
+    background: #4a90e2;
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 8px 6px 8px 0;
+    font-size: 14px;
+    transition: background 0.15s;
+}
+button:hover { background: #357ab8; }
+
+.hint {
+    color: #888;
+    font-size: 13px;
+}
+.hint code {
+    background: #eee;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+#stats {
+    font-size: 14px;
+    color: #555;
+    margin-top: 8px;
+}
+
+#mapping {
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+.map-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.map-row .num {
+    font-family: monospace;
+    font-weight: bold;
+    background: #eef3ff;
+    color: #2c3e50;
+    padding: 3px 8px;
+    border-radius: 5px;
+    min-width: 38px;
+    text-align: center;
+}
+.map-row .cnt { color: #999; font-size: 12px; min-width: 34px; }
+.map-row .arrow { color: #bbb; }
+.map-row input {
+    width: 48px;
+    text-align: center;
+    font-size: 16px;
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    text-transform: lowercase;
+    box-sizing: border-box;
+}
+.map-row input:focus {
+    outline: 2px solid #4a90e2;
+    border-color: transparent;
+}
+
+.brute-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.brute-row select {
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+.brute-btn {
+    background: linear-gradient(135deg, #8e44ad, #9b59b6);
+    font-weight: bold;
+}
+.brute-btn:hover { background: linear-gradient(135deg, #7d3c98, #8e44ad); }
+
+.brute-status {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #f4ecfb;
+    border-left: 4px solid #9b59b6;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #4a235a;
+}
+.brute-status.show { display: block; }
+
+.result-block {
+    margin-top: 20px;
+    background: white;
+    padding: 18px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+#result {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 17px;
+    line-height: 1.7;
+    font-family: 'Georgia', serif;
+    background: #fafbfc;
+    padding: 14px;
+    border-radius: 6px;
+    min-height: 80px;
+    margin: 0;
+}
+
 /* ====== Premium кнопка ====== */
 .premium-btn {
     position: fixed;
@@ -122,6 +277,7 @@
     border: none;
     cursor: pointer;
     transition: transform 0.12s;
+    margin: 0;
 }
 .buy-btn:hover { transform: scale(1.03); }
 
@@ -132,6 +288,7 @@
     border: none;
     border-radius: 8px;
     cursor: pointer;
+    margin: 0;
 }
 .cancel-btn:hover { background: #ddd; }
 
@@ -164,21 +321,10 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
-.brute-btn {
-    background: linear-gradient(135deg, #8e44ad, #9b59b6);
-    font-weight: bold;
-}
-.brute-btn:hover { background: linear-gradient(135deg, #7d3c98, #8e44ad); }
 
-.brute-status {
-    display: none;
-    margin-top: 10px;
-    padding: 10px 12px;
-    background: #f4ecfb;
-    border-left: 4px solid #9b59b6;
-    border-radius: 6px;
-    font-size: 13px;
-    line-height: 1.6;
-    color: #4a235a;
+/* ====== Адаптив ====== */
+@media (max-width: 800px) {
+    .row { flex-direction: column; }
+    .premium-btn { padding: 8px 12px; font-size: 13px; }
+    #mapping { max-height: 400px; }
 }
-.brute-status.show { display: block; }

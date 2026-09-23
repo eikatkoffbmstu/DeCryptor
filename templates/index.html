@@ -6,21 +6,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<button onclick="analyze()">Проанализировать</button>
-<button onclick="applyDefaults()">01=␣, 20=и</button>
-<button onclick="clearMapping()">Сбросить</button>
 
-<!-- 🔨 НОВОЕ: брутфорс -->
-<button class="brute-btn" onclick="runBrute()">🔨 Подобрать автоматически</button>
-<select id="bruteTime" style="margin-left:6px;padding:6px;border-radius:6px;">
-    <option value="5">5 сек</option>
-    <option value="8" selected>8 сек</option>
-    <option value="15">15 сек</option>
-    <option value="30">30 сек</option>
-</select>
-
-<div id="bruteStatus" class="brute-status"></div>
-<!-- ⭐ Кнопка Premium в правом верхнем углу -->
+<!-- ⭐ Premium -->
 <button class="premium-btn" onclick="openPremium()">⭐ Купить Premium</button>
 
 <h1>🔍 Частотный анализ числового шифра</h1>
@@ -28,14 +15,23 @@
 <div class="row">
     <div class="col">
         <label>Шифротекст (числа через пробел):</label>
-        <textarea id="cipher" rows="10" placeholder="01 02 03 ...">10 07 03 12 01 20 16 18 26 10 18 06 25 06 14 03 01 26 13 01 14 17 01 19.
-17 16 20 16 14 21 25 20 16 22 18 16 15 20 04 06 15 06 18 01 13 15 01 32 04 06.
-15 01 20 01 12 16 14 18 01 19 19 20 16 33 15 30 10 13 32 02 16 11 17 18 10 12 01 09
-17 18 06 03 18 01 27 01 06 20 19 33 18 01 24 10 06 11 03 02 21 04 10 03 21 04 10.</textarea>
+        <textarea id="cipher" rows="10" placeholder="01 02 03 ..."></textarea>
 
         <button onclick="analyze()">Проанализировать</button>
         <button onclick="applyDefaults()">01=␣, 20=и</button>
         <button onclick="clearMapping()">Сбросить</button>
+
+        <div class="brute-row">
+            <button class="brute-btn" onclick="runBrute()">🔨 Подобрать автоматически</button>
+            <select id="bruteTime">
+                <option value="5">5 сек</option>
+                <option value="8">8 сек</option>
+                <option value="15" selected>15 сек</option>
+                <option value="30">30 сек</option>
+            </select>
+        </div>
+
+        <div id="bruteStatus" class="brute-status"></div>
 
         <h3>Статистика</h3>
         <div id="stats"></div>
@@ -53,7 +49,7 @@
     <pre id="result"></pre>
 </div>
 
-<!-- ===== Модальное окно Premium ===== -->
+<!-- ===== Модалка Premium ===== -->
 <div id="premiumModal" class="modal-overlay" onclick="closePremiumOutside(event)">
     <div class="modal">
         <div class="modal-header">
@@ -88,7 +84,6 @@
     </div>
 </div>
 
-<!-- ===== Тост-уведомление ===== -->
 <div id="toast" class="toast"></div>
 
 <script>
@@ -119,9 +114,11 @@ async function analyze() {
                    oninput="onInputChange(this)">
         </div>`;
     }).join('');
+
+    decode();
 }
 
-function onInputChange(input) {
+function onInputChange() {
     decode();
 }
 
@@ -130,9 +127,7 @@ async function decode() {
     const inputs = document.querySelectorAll('#mapping input');
     const mapping = {};
     inputs.forEach(inp => {
-        let v = inp.value;
-        if (v === '') return;
-        mapping[inp.dataset.tok] = v;
+        if (inp.value !== '') mapping[inp.dataset.tok] = inp.value;
     });
 
     const resp = await fetch('/decode', {
@@ -154,46 +149,10 @@ function applyDefaults() {
 }
 
 function clearMapping() {
-    const inputs = document.querySelectorAll('#mapping input');
-    inputs.forEach(inp => inp.value = '');
+    document.querySelectorAll('#mapping input').forEach(inp => inp.value = '');
     decode();
 }
 
-/* ================= PREMIUM (шутка) ================= */
-
-function openPremium() {
-    document.getElementById('premiumModal').classList.add('show');
-}
-
-function closePremium() {
-    document.getElementById('premiumModal').classList.remove('show');
-}
-
-function closePremiumOutside(e) {
-    if (e.target.id === 'premiumModal') {
-        closePremium();
-    }
-}
-
-function fakeBuy() {
-    closePremium();
-    showToast('✅ Спасибо за покупку! Ваш заказ обрабатывается…');
-    setTimeout(() => {
-        showToast('⏳ Обработка заказа… 99%');
-    }, 900);
-    setTimeout(() => {
-        showToast('😅 Шутка. Подписки нет. Продолжайте расшифровку.');
-    }, 2200);
-}
-
-let toastTimer = null;
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
-}
 async function runBrute() {
     const text = document.getElementById('cipher').value;
     const timeLimit = parseFloat(document.getElementById('bruteTime').value);
@@ -201,6 +160,7 @@ async function runBrute() {
 
     if (!text.trim()) {
         status.textContent = '⚠️ Вставь шифротекст';
+        status.classList.add('show');
         return;
     }
 
@@ -220,13 +180,15 @@ async function runBrute() {
             return;
         }
 
-        // Заполняем поля сопоставления найденными буквами
-        const inputs = document.querySelectorAll('#mapping input');
+        // Если ещё не анализировали — сделаем analyze, чтобы появились поля
+        let inputs = document.querySelectorAll('#mapping input');
         if (inputs.length === 0) {
-            // Если ещё не анализировали — сделаем analyze сначала
             await analyze();
+            inputs = document.querySelectorAll('#mapping input');
         }
-        document.querySelectorAll('#mapping input').forEach(inp => {
+
+        // Заполняем поля найденными буквами
+        inputs.forEach(inp => {
             const tok = inp.dataset.tok;
             if (data.mapping[tok] !== undefined) {
                 inp.value = data.mapping[tok];
@@ -237,11 +199,47 @@ async function runBrute() {
         decode();
 
         status.innerHTML = `✅ Готово за ${data.elapsed} сек.<br>
-            Найдено слов в словаре: <b>${data.score}</b> из ${data.total_words} (уникальных: ${data.unique_words})<br>
-            Словарь: ${data.dict_size.toLocaleString('ru-RU')} слов, улучшений: ${data.improvements}`;
+            Точных слов: <b>${data.exact_words}</b>,
+            частичных: <b>${data.partial_words}</b>
+            из ${data.total_words}<br>
+            Счёт: <b>${data.score}</b> ·
+            пробел = число <b>${data.space_token}</b><br>
+            Словарь: ${data.dict_size.toLocaleString('ru-RU')} слов ·
+            триграмм: ${data.trigram_size.toLocaleString('ru-RU')}<br>
+            Улучшений: ${data.improvements}`;
     } catch (e) {
         status.textContent = '❌ Ошибка: ' + e.message;
     }
+}
+
+/* ============== PREMIUM (шутка) ============== */
+
+function openPremium() {
+    document.getElementById('premiumModal').classList.add('show');
+}
+
+function closePremium() {
+    document.getElementById('premiumModal').classList.remove('show');
+}
+
+function closePremiumOutside(e) {
+    if (e.target.id === 'premiumModal') closePremium();
+}
+
+function fakeBuy() {
+    closePremium();
+    showToast('✅ Спасибо за покупку! Ваш заказ обрабатывается…');
+    setTimeout(() => showToast('⏳ Обработка заказа… 99%'), 900);
+    setTimeout(() => showToast('😅 Шутка. Подписки нет. Продолжайте расшифровку.'), 2200);
+}
+
+let toastTimer = null;
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 </script>
 </body>
