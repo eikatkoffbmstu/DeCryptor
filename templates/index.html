@@ -7,18 +7,16 @@
 </head>
 <body>
 
-<!-- ⭐ Premium -->
 <button class="premium-btn" onclick="openPremium()">⭐ Купить Premium</button>
 
 <h1>🔍 Частотный анализ числового шифра</h1>
 
 <div class="row">
     <div class="col">
-        <label>Шифротекст (числа через пробел):</label>
-        <textarea id="cipher" rows="10" placeholder="01 02 03 ..."></textarea>
+        <label>Шифротекст (числа = буквы, пробел = разделитель слов):</label>
+        <textarea id="cipher" rows="10" placeholder="12 18 10 17 20 | 16 05 18 02 22 10 32"></textarea>
 
         <button onclick="analyze()">Проанализировать</button>
-        <button onclick="applyDefaults()">01=␣, 20=и</button>
         <button onclick="clearMapping()">Сбросить</button>
 
         <div class="brute-row">
@@ -32,6 +30,7 @@
         </div>
 
         <div id="bruteStatus" class="brute-status"></div>
+        <div id="bruteWords" class="brute-words"></div>
 
         <h3>Статистика</h3>
         <div id="stats"></div>
@@ -39,7 +38,7 @@
 
     <div class="col">
         <h3>Сопоставление (число → буква)</h3>
-        <p class="hint">Пробел обозначай символом <code>␣</code> или оставь поле пустым</p>
+        <p class="hint">Пробел в шифротексте — просто пробел (или <code>|</code>, <code>,</code>, <code>/</code>)</p>
         <div id="mapping"></div>
     </div>
 </div>
@@ -49,7 +48,7 @@
     <pre id="result"></pre>
 </div>
 
-<!-- ===== Модалка Premium ===== -->
+<!-- ===== Premium ===== -->
 <div id="premiumModal" class="modal-overlay" onclick="closePremiumOutside(event)">
     <div class="modal">
         <div class="modal-header">
@@ -59,11 +58,11 @@
         <p class="modal-tagline">Расшифровывай быстрее. Живи ярче.</p>
 
         <ul class="features">
-            <li>✅ <b>Неограниченный частотный анализ</b> (у вас и так неограниченный, но звучит солидно)</li>
-            <li>✅ <b>ИИ-подсказки</b> для двубуквенных слов (спойлер: это словарь из 5 слов)</li>
+            <li>✅ <b>Неограниченный частотный анализ</b></li>
+            <li>✅ <b>ИИ-подсказки</b> для двубуквенных слов</li>
             <li>✅ <b>Тёмная тема</b>, которую мы ещё не сделали</li>
             <li>✅ <b>Приоритетная поддержка</b> в чате с самим собой</li>
-            <li>✅ <b>Значок ⭐ рядом с ником</b> (виден только вам)</li>
+            <li>✅ <b>Значок ⭐ рядом с ником</b></li>
             <li>❌ Реклама (её и так нет)</li>
         </ul>
 
@@ -79,7 +78,6 @@
 
         <p class="fine-print">
             * Подписка не существует. Кнопка «Купить» ничего не покупает.
-            Она просто закрывает это окно. Мы честные.
         </p>
     </div>
 </div>
@@ -111,14 +109,10 @@ async function analyze() {
             <span class="cnt">×${cnt}</span>
             <span class="arrow">→</span>
             <input type="text" maxlength="1" data-tok="${tok}" value="${val}"
-                   oninput="onInputChange(this)">
+                   oninput="decode()">
         </div>`;
     }).join('');
 
-    decode();
-}
-
-function onInputChange() {
     decode();
 }
 
@@ -139,15 +133,6 @@ async function decode() {
     document.getElementById('result').textContent = data.result;
 }
 
-function applyDefaults() {
-    const inputs = document.querySelectorAll('#mapping input');
-    inputs.forEach(inp => {
-        if (inp.dataset.tok === '01') inp.value = ' ';
-        if (inp.dataset.tok === '20') inp.value = 'и';
-    });
-    decode();
-}
-
 function clearMapping() {
     document.querySelectorAll('#mapping input').forEach(inp => inp.value = '');
     decode();
@@ -157,6 +142,7 @@ async function runBrute() {
     const text = document.getElementById('cipher').value;
     const timeLimit = parseFloat(document.getElementById('bruteTime').value);
     const status = document.getElementById('bruteStatus');
+    const wordsDiv = document.getElementById('bruteWords');
 
     if (!text.trim()) {
         status.textContent = '⚠️ Вставь шифротекст';
@@ -166,6 +152,8 @@ async function runBrute() {
 
     status.innerHTML = `⏳ Перебираю варианты (до ${timeLimit} сек)…`;
     status.classList.add('show');
+    wordsDiv.innerHTML = '';
+    wordsDiv.classList.remove('show');
 
     try {
         const resp = await fetch('/bruteforce', {
@@ -187,7 +175,7 @@ async function runBrute() {
             inputs = document.querySelectorAll('#mapping input');
         }
 
-        // Заполняем поля найденными буквами
+        // Заполняем поля
         inputs.forEach(inp => {
             const tok = inp.dataset.tok;
             if (data.mapping[tok] !== undefined) {
@@ -195,36 +183,55 @@ async function runBrute() {
             }
         });
 
-        // Показываем результат
         decode();
 
         status.innerHTML = `✅ Готово за ${data.elapsed} сек.<br>
             Точных слов: <b>${data.exact_words}</b>,
             частичных: <b>${data.partial_words}</b>
             из ${data.total_words}<br>
-            Счёт: <b>${data.score}</b> ·
-            пробел = число <b>${data.space_token}</b><br>
+            Счёт: <b>${data.score}</b><br>
             Словарь: ${data.dict_size.toLocaleString('ru-RU')} слов ·
             триграмм: ${data.trigram_size.toLocaleString('ru-RU')}<br>
             Улучшений: ${data.improvements}`;
+
+        renderWords(data.words || []);
     } catch (e) {
         status.textContent = '❌ Ошибка: ' + e.message;
     }
 }
 
+function renderWords(words) {
+    const div = document.getElementById('bruteWords');
+    if (!words || words.length === 0) {
+        div.innerHTML = '';
+        return;
+    }
+
+    const order = { exact: 0, partial: 1, miss: 2 };
+    words.sort((a, b) => order[a.status] - order[b.status]);
+
+    const rows = words.map(w => {
+        const icon = w.status === 'exact' ? '✅' : (w.status === 'partial' ? '🟡' : '❌');
+        const scoreStr = w.status === 'exact' ? 'точно' : w.score.toFixed(2);
+        return `<div class="word-row ${w.status}">
+            <span class="w-icon">${icon}</span>
+            <span class="w-text">${w.word}</span>
+            <span class="w-score">${scoreStr}</span>
+        </div>`;
+    }).join('');
+
+    div.innerHTML = `
+        <h4>Найденные слова (${words.length})</h4>
+        <div class="word-list">${rows}</div>
+    `;
+    div.classList.add('show');
+}
+
 /* ============== PREMIUM (шутка) ============== */
 
-function openPremium() {
-    document.getElementById('premiumModal').classList.add('show');
-}
-
-function closePremium() {
-    document.getElementById('premiumModal').classList.remove('show');
-}
-
-function closePremiumOutside(e) {
-    if (e.target.id === 'premiumModal') closePremium();
-}
+function openPremium() { document.getElementById('premiumModal').classList.add('show'); }
+function closePremium() { document.getElementById('premiumModal').classList.remove('show'); }
+function closePremiumOutside(e) { if (e.target.id === 'premiumModal') closePremium(); }
 
 function fakeBuy() {
     closePremium();

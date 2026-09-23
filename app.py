@@ -6,7 +6,6 @@ import time
 
 app = Flask(__name__)
 
-# Частоты букв русского языка (по убыванию)
 RU_FREQ = "оеаинтсрвлкмдпуяыьгзбчйхжшюцщэфъё"
 
 
@@ -30,7 +29,6 @@ def load_dictionary(path="data/russian.txt"):
 load_dictionary()
 
 
-# ================== ЧАСТЫЕ БИГРАММЫ РУССКОГО ЯЗЫКА ==================
 COMMON_BIGRAMS = {
     "ст", "но", "то", "на", "ен", "ов", "ни", "ра", "во", "ко",
     "ро", "по", "ос", "го", "ер", "ре", "не", "ал", "ли", "ол",
@@ -40,7 +38,6 @@ COMMON_BIGRAMS = {
 }
 
 
-# ================== ПРЕДВАРИТЕЛЬНЫЙ ИНДЕКС ТРИГРАММ ==================
 DICT_TRIGRAMS = set()
 
 
@@ -56,29 +53,56 @@ def build_dict_trigrams():
 build_dict_trigrams()
 
 
+# ================== ПАРСИНГ ШИФРОТЕКСТА ==================
+
+# Разделители слов: пробел, точка, запятая, |, /, -, перенос строки и т.п.
+WORD_SEPARATORS = set(" .,;:!?|/\\\n\t\r")
+
+
+def parse_tokens(text):
+    """
+    Разбивает текст на токены:
+    - числа ("01", "23", ...) — буквы
+    - разделители (" ", ".", "|", ...) — границы слов
+    Возвращает список: [("num", "01"), ("sep", " "), ("num", "18"), ...]
+    """
+    tokens = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch.isdigit():
+            j = i
+            while j < len(text) and text[j].isdigit():
+                j += 1
+            tokens.append(("num", text[i:j]))
+            i = j
+        elif ch in WORD_SEPARATORS:
+            # Схлопываем несколько подряд идущих разделителей в один " "
+            tokens.append(("sep", " "))
+            i += 1
+            while i < len(text) and text[i] in WORD_SEPARATORS:
+                i += 1
+        else:
+            # Прочие символы игнорируем
+            i += 1
+    return tokens
+
+
 # ================== НЕЧЁТКОЕ СРАВНЕНИЕ ==================
 
 def ngrams(word, n=3):
-    """Все подстроки длины n."""
     if len(word) < n:
         return {word} if word else set()
     return {word[i:i + n] for i in range(len(word) - n + 1)}
 
 
 def partial_match_score(word, min_overlap=0.4):
-    """
-    Возвращает 0..1 — насколько слово "узнаётся" в словаре.
-    1.0 — если слово точно есть в словаре.
-    0.4..0.99 — если ≥40% его триграмм встречаются в словарных словах.
-    """
     if len(word) < 2:
         return 0.0
 
-    # Точное совпадение — максимальный балл
     if word in WORDS:
         return 1.0
 
-    # Проверяем по триграммам
     word_trigrams = ngrams(word, 3)
     if word_trigrams and DICT_TRIGRAMS:
         hits = sum(1 for tg in word_trigrams if tg in DICT_TRIGRAMS)
@@ -86,7 +110,6 @@ def partial_match_score(word, min_overlap=0.4):
         if overlap >= min_overlap:
             return overlap
 
-    # Для коротких слов — проверка по частым биграммам
     if len(word) <= 4:
         bg = ngrams(word, 2)
         if bg:
@@ -98,41 +121,54 @@ def partial_match_score(word, min_overlap=0.4):
     return 0.0
 
 
-# ================== СКОРИНГ ==================
+# ================== СКОРИНГ И РАЗБОР СЛОВ ==================
 
-def score_text(mapping, tokens):
+def build_words(mapping, tokens):
     """
-    Оценка качества сопоставления.
-    Возвращает: (total_score, exact_words, partial_words, total_words)
+    Из списка токенов и mapping строит список слов.
+    tokens: список ("num", "01") / ("sep", " ")
+    mapping: {"01": "к", "18": "р", ...}
     """
-    # Ищем, какое число = пробел
-    space_tok = None
-    for k, v in mapping.items():
-        if v == ' ':
-            space_tok = k
-            break
-    if space_tok is None:
-        return (0.0, 0, 0, 0)
-
-    # Строим слова
     words = []
     current = []
-    for tok in tokens:
-        ch = mapping.get(tok, '?')
-        if ch == ' ':
+    for kind, val in tokens:
+        if kind == "sep":
             if current:
                 words.append("".join(current))
                 current = []
-        else:
+        else:  # num
+            ch = mapping.get(val, "?")
             current.append(ch)
     if current:
         words.append("".join(current))
+    return words
 
+
+def extract_words(mapping, tokens):
+    """Список слов с оценкой."""
+    words = build_words(mapping, tokens)
+    result = []
+    for w in words:
+        if len(w) < 2:
+            continue
+        s = partial_match_score(w)
+        if s >= 1.0:
+            status = "exact"
+        elif s >= 0.4:
+            status = "partial"
+        else:
+            status = "miss"
+        result.append({"word": w, "score": round(s, 2), "status": status})
+    return result
+
+
+def score_text(mapping, tokens):
+    """Оценка mapping. Возвращает (total_score, exact, partial, total)."""
+    words = build_words(mapping, tokens)
     total_score = 0.0
     exact = 0
     partial = 0
     total = 0
-
     for w in words:
         if len(w) < 2:
             continue
@@ -146,7 +182,6 @@ def score_text(mapping, tokens):
             total_score += s * 2.0
         else:
             total_score -= 0.1 * len(w)
-
     return (total_score, exact, partial, total)
 
 
@@ -155,39 +190,38 @@ def score_text(mapping, tokens):
 def brute_force(tokens, time_limit=8.0):
     start = time.time()
 
-    print(f"[brute] Токенов: {len(tokens)}, уникальных: {len(set(tokens))}")
-    print(f"[brute] Словарь: {len(WORDS)} слов, триграмм: {len(DICT_TRIGRAMS)}")
-
-    unique_toks = sorted(set(tokens), key=lambda t: int(t))
+    # Уникальные числа
+    numbers = [val for kind, val in tokens if kind == "num"]
+    unique_toks = sorted(set(numbers), key=lambda t: int(t))
     if len(unique_toks) > 33:
         unique_toks = unique_toks[:33]
 
-    freq = Counter(tokens)
+    freq = Counter(numbers)
     sorted_by_freq = sorted(unique_toks, key=lambda t: -freq[t])
 
-    # Пробел ставим на САМОЕ ЧАСТОЕ число
-    space_tok = sorted_by_freq[0]
+    print(f"[brute] Токенов: {len(tokens)}, чисел: {len(numbers)}, уникальных: {len(unique_toks)}")
+    print(f"[brute] Словарь: {len(WORDS)} слов, триграмм: {len(DICT_TRIGRAMS)}")
 
-    # Остальные числа получают буквы из RU_FREQ
+    # Начальное сопоставление по частоте
     letters = list(RU_FREQ)
-    best_mapping = {space_tok: ' '}
-    letter_idx = 0
-    for tok in sorted_by_freq:
-        if tok == space_tok:
-            continue
-        if letter_idx < len(letters):
-            best_mapping[tok] = letters[letter_idx]
-            letter_idx += 1
+    best_mapping = {}
+    for i, tok in enumerate(sorted_by_freq):
+        if i < len(letters):
+            best_mapping[tok] = letters[i]
+
+    # Все числа получают букву
+    for tok in unique_toks:
+        if tok not in best_mapping:
+            best_mapping[tok] = random.choice(letters)
 
     best_score, *_ = score_text(best_mapping, tokens)
     best_result = dict(best_mapping)
-    print(f"[brute] Стартовый скор: {best_score:.2f}, пробел = {space_tok}")
+    print(f"[brute] Стартовый скор: {best_score:.2f}")
 
     improvements = 0
     letters_pool = list(RU_FREQ)
-    modifiable = [t for t in unique_toks if t != space_tok]
 
-    if len(modifiable) < 1:
+    if len(unique_toks) < 2:
         total_score, exact, partial, total = score_text(best_result, tokens)
         return {
             "mapping": best_result,
@@ -199,19 +233,18 @@ def brute_force(tokens, time_limit=8.0):
             "dict_size": len(WORDS),
             "trigram_size": len(DICT_TRIGRAMS),
             "elapsed": round(time.time() - start, 2),
-            "space_token": space_tok,
+            "words": extract_words(best_result, tokens),
         }
 
     while time.time() - start < time_limit:
         mode = random.choice(["swap", "reassign"])
-
         candidate = dict(best_result)
 
-        if mode == "swap" and len(modifiable) >= 2:
-            a, b = random.sample(modifiable, 2)
+        if mode == "swap" and len(unique_toks) >= 2:
+            a, b = random.sample(unique_toks, 2)
             candidate[a], candidate[b] = candidate.get(b, '?'), candidate.get(a, '?')
         else:
-            tok = random.choice(modifiable)
+            tok = random.choice(unique_toks)
             candidate[tok] = random.choice(letters_pool)
 
         sc, *_ = score_text(candidate, tokens)
@@ -234,7 +267,7 @@ def brute_force(tokens, time_limit=8.0):
         "dict_size": len(WORDS),
         "trigram_size": len(DICT_TRIGRAMS),
         "elapsed": round(time.time() - start, 2),
-        "space_token": space_tok,
+        "words": extract_words(best_result, tokens),
     }
 
 
@@ -249,19 +282,23 @@ def index():
 def analyze():
     data = request.get_json()
     text = data.get("text", "")
-    tokens = re.findall(r"\d+", text)
-    counter = Counter(tokens)
-    sorted_tokens = sorted(counter.keys(), key=lambda t: (-counter[t], int(t)))
+    tokens = parse_tokens(text)
+
+    numbers = [val for kind, val in tokens if kind == "num"]
+    counter = Counter(numbers)
+    sorted_nums = sorted(counter.keys(), key=lambda t: (-counter[t], int(t)))
 
     suggestion = {}
-    for i, tok in enumerate(sorted_tokens):
+    for i, tok in enumerate(sorted_nums):
         suggestion[tok] = RU_FREQ[i] if i < len(RU_FREQ) else "?"
+
+    words = build_words(suggestion, tokens)  # только для info
 
     return jsonify({
         "counts": dict(counter),
-        "sorted_tokens": sorted_tokens,
+        "sorted_tokens": sorted_nums,
         "suggestion": suggestion,
-        "total": len(tokens),
+        "total": len(numbers),
         "unique": len(counter),
     })
 
@@ -272,11 +309,15 @@ def decode():
     text = data.get("text", "")
     mapping = data.get("mapping", {})
 
-    def replace_token(match):
-        tok = match.group(0)
-        return mapping.get(tok, f"[{tok}]")
+    tokens = parse_tokens(text)
+    parts = []
+    for kind, val in tokens:
+        if kind == "sep":
+            parts.append(" ")
+        else:
+            parts.append(mapping.get(val, f"[{val}]"))
 
-    return jsonify({"result": re.sub(r"\d+", replace_token, text)})
+    return jsonify({"result": "".join(parts)})
 
 
 @app.route("/bruteforce", methods=["POST"])
@@ -286,17 +327,22 @@ def bruteforce():
     time_limit = float(data.get("time_limit", 8.0))
     time_limit = min(max(time_limit, 2.0), 30.0)
 
-    tokens = re.findall(r"\d+", text)
-    if not tokens:
+    tokens = parse_tokens(text)
+    numbers = [val for kind, val in tokens if kind == "num"]
+    if not numbers:
         return jsonify({"error": "Нет чисел в тексте"})
 
     result = brute_force(tokens, time_limit=time_limit)
 
-    def replace_token(match):
-        tok = match.group(0)
-        return result["mapping"].get(tok, f"[{tok}]")
+    # Расшифрованный текст
+    parts = []
+    for kind, val in tokens:
+        if kind == "sep":
+            parts.append(" ")
+        else:
+            parts.append(result["mapping"].get(val, f"[{val}]"))
+    result["decoded"] = "".join(parts)
 
-    result["decoded"] = re.sub(r"\d+", replace_token, text)
     return jsonify(result)
 
 
